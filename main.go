@@ -56,30 +56,42 @@ func (q *Queue) Init(length int) {
 	}
 }
 
-func Screen(scr chan<- bool) {
+func Screen(scr chan<- bool, done <-chan struct{}) {
 	r := rand.New(rand.NewSource(time.Now().Unix()))
 	for {
 		time.Sleep(3 * time.Second)
 		scr <- r.Intn(10) > 0
+		select {
+		case <-done:
+			return
+		default:
+		}
 	}
 }
 
-func Enqueue(enq chan<- Person) {
+func Enqueue(enq chan<- Person, done <-chan struct{}) {
 	r := rand.New(rand.NewSource(time.Now().Unix()))
 	for {
 		randSec := 1 + r.Intn(6)
 		time.Sleep(time.Duration(randSec) * time.Second)
 		enq <- NewPerson(r)
+		select {
+		case <-done:
+			return
+		default:
+		}
 	}
 }
 
 func main() {
 	scr, enq := make(chan bool), make(chan Person)
+	done := make(chan struct{})
 	var queue Queue
 	queue.Init(10)
 	queue.Print("init")
-	go Enqueue(enq)
-	go Screen(scr)
+	go Enqueue(enq, done)
+	go Screen(scr, done)
+	var counter int
 	for {
 		str := ""
 		select {
@@ -94,6 +106,11 @@ func main() {
 				copy(queue[:len(queue)-1], queue[1:])
 				queue[len(queue)-1] = person
 				str = "requeue"
+			}
+			counter++
+			if counter == 60 { //for running 3 min
+				close(done)
+				return
 			}
 		}
 		queue.Print(str)
